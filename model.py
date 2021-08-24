@@ -1,6 +1,7 @@
 import math
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from gdn import GDN
 from bit_estimator import BitEstimator
@@ -32,8 +33,10 @@ class AnalysisNet(nn.Module):
 
     def forward(self, x):
         x = self.gdn1(self.conv1(x))
-        x = self.gdn2(self.conv2(x))
-        x = self.gdn3(self.conv3(x))
+        res = F.interpolate(x, scale_factor=0.5, mode="bilinear")
+        x = self.gdn2(self.conv2(x)) + res
+        res = F.interpolate(x, scale_factor=0.5, mode="bilinear")
+        x = self.gdn3(self.conv3(x)) + res
         x = self.conv4(x)
         return x
 
@@ -89,8 +92,10 @@ class SynthesisNet(nn.Module):
 
     def forward(self, x):
         x = self.igdn1(self.deconv1(x))
-        x = self.igdn2(self.deconv2(x))
-        x = self.igdn3(self.deconv3(x))
+        res = F.interpolate(x, scale_factor=2, mode="bilinear")
+        x = self.igdn2(self.deconv2(x)) + res
+        res = F.interpolate(x, scale_factor=2, mode="bilinear")
+        x = self.igdn3(self.deconv3(x)) + res
         x = self.deconv4(x)
         return x
 
