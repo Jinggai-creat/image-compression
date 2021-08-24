@@ -8,23 +8,6 @@ def get_length(generator):
     return sum(1 for _ in generator)
 
 
-def weights_init(model):
-    """init from article"""
-    for m in model.modules():
-        if isinstance(m, nn.Conv2d):
-            nn.init.xavier_normal_(
-                m.weight.data, 
-                (math.sqrt(2 * (3 + m.weight.data.shape[0]) / (6)))
-            )
-            nn.init.constant_(m.bias.data, 0.01)
-        elif isinstance(m, nn.ConvTranspose2d):
-            nn.init.xavier_normal_(
-                m.weight.data, 
-                (math.sqrt(2 * (3 + m.weight.data.shape[0]) / (6)))
-            )
-            nn.init.constant_(m.bias.data, 0.01)
-
-
 def gaussian(window_size, sigma):
     gauss = torch.Tensor([exp(-(x - window_size//2)**2/float(2*sigma**2)) for x in range(window_size)])
     return gauss/gauss.sum()

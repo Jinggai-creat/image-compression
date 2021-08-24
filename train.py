@@ -49,7 +49,6 @@ valid_dataloader = dataloader.DataLoader(dataset=valid_dataset, batch_size=1)
 
 # models init
 model = model.EDICImageCompression().to(device)
-model.apply(utils.weights_init)
 
 # criterion init
 criterion = torch.nn.MSELoss()
@@ -61,9 +60,7 @@ model_scheduler = optim.lr_scheduler.CosineAnnealingLR(model_optimizer, T_max=op
 # train model
 print("-----------------train-----------------")
 for epoch in range(opt.niter):
-
     model.train()
-
     epoch_losses = utils.AverageMeter()
 
     with tqdm(total=(length - length % opt.batch_size)) as t:
@@ -77,21 +74,23 @@ for epoch in range(opt.niter):
                 record["size"][0],
             ).float().to("cuda")
 
-            outputs, bpp = model(inputs)
+            inputs = inputs.clamp(0., 1.)
+
+            outputs, bpp_feature, bpp_z = model(inputs)
 
             model_optimizer.zero_grad()
 
             loss = criterion(inputs, outputs)
             loss.backward()
-            utils.clip_gradient(model_optimizer, 5)
-
-            epoch_losses.update(loss.item(), len(inputs))
+            utils.clip_gradient(model_optimizer, 3)
 
             model_optimizer.step()
+            epoch_losses.update(loss.item(), len(inputs))
 
             t.set_postfix(
                 loss='{:.6f}'.format(epoch_losses.avg),
-                bpp='{:.6f}'.format(bpp)
+                bpp_feature='{:.6f}'.format(bpp_feature),
+                bpp_z='{:.6f}'.format(bpp_z)
             )
             t.update(len(inputs))
 
@@ -99,7 +98,6 @@ for epoch in range(opt.niter):
 
     # test
     model.eval()
-
     epoch_pnsr = utils.AverageMeter()
     epoch_ssim = utils.AverageMeter()
 
@@ -112,8 +110,8 @@ for epoch in range(opt.niter):
         ).float().to("cuda")
 
         with torch.no_grad():
-            output, _ = model(inputs[0])
+            output, _, _ = model(inputs[0])
             epoch_pnsr.update(utils.calc_pnsr(output, inputs[0]), len(inputs))
             epoch_ssim.update(utils.calc_ssim(output, inputs[0]), len(inputs))
 
-    print('eval psnr: {:.4f} eval ssim: {:.4f}'.format(epoch_pnsr.avg, epoch_ssim.avg))
+    print('eval psnr: {:.4f} eval ssim: {:.4f} \n'.format(epoch_pnsr.avg, epoch_ssim.avg))
