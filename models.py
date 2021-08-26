@@ -8,13 +8,37 @@ from bit_estimator import BitEstimator
 import utils
 
 
+class MaxBlurPool(nn.Module):
+    """
+    Simplified implementation of MaxBlurPool
+    """
+    def __init__(self, n):
+        super().__init__()
+        self.maxpool = nn.MaxPool2d((2, 2))
+        self.padding = nn.ReflectionPad2d(1)
+
+        f = torch.tensor([1, 2, 1])
+        f = (f[None, :] * f[:, None]).float()
+        f /= f.sum()
+        f = f[None, None].repeat((n, 1, 1, 1))
+
+        self.register_buffer('f', f)
+
+    def forward(self, x):
+        x = self.maxpool(x)
+        x = self.padding(x)
+        x = F.conv2d(x, self.f, stride=2, groups=x.shape[1])
+        return x
+
+
 class AnalysisNet(nn.Module):
     """AnalysisNet"""
-    def __init__(self, out_channels_n=128, out_channels_m=192):
+    def __init__(self, out_channels_n=192, out_channels_m=320):
         super(AnalysisNet, self).__init__()
         self.conv1 = nn.Conv2d(3, out_channels_n, kernel_size=5, stride=2, padding=2)
         nn.init.xavier_normal_(self.conv1.weight.data, (math.sqrt(2 * (3 + out_channels_n) / (6))))
         nn.init.constant_(self.conv1.bias.data, 0.01)
+        self.pool1 = MaxBlurPool(out_channels_n)
         self.gdn1 = GDN(out_channels_n)
 
         self.conv2 = nn.Conv2d(out_channels_n, out_channels_n, kernel_size=5, stride=2, padding=2)
@@ -33,9 +57,8 @@ class AnalysisNet(nn.Module):
 
     def forward(self, x):
         x = self.gdn1(self.conv1(x))
-        res = F.interpolate(x, scale_factor=0.5, mode="bilinear")
-        x = self.gdn2(self.conv2(x)) + res
-        res = F.interpolate(x, scale_factor=0.5, mode="bilinear")
+        res = self.pool1(x)
+        x = self.gdn2(self.conv2(x))
         x = self.gdn3(self.conv3(x)) + res
         x = self.conv4(x)
         return x
@@ -43,7 +66,7 @@ class AnalysisNet(nn.Module):
 
 class AnalysisPriorNet(nn.Module):
     """AnalysisPriorNet"""
-    def __init__(self, out_channels_n=128, out_channels_m=192):
+    def __init__(self, out_channels_n=192, out_channels_m=320):
         super(AnalysisPriorNet, self).__init__()
         self.conv1 = nn.Conv2d(out_channels_m, out_channels_n, kernel_size=3, stride=1, padding=1)
         nn.init.xavier_normal_(self.conv1.weight.data, (math.sqrt(2 * (out_channels_m + out_channels_n) / (out_channels_m + out_channels_m))))
@@ -69,7 +92,7 @@ class AnalysisPriorNet(nn.Module):
 
 class SynthesisNet(nn.Module):
     """SynthesisNet"""
-    def __init__(self, out_channels_n=128, out_channels_m=192):
+    def __init__(self, out_channels_n=192, out_channels_m=320):
         super(SynthesisNet, self).__init__()
         self.deconv1 = nn.ConvTranspose2d(out_channels_m, out_channels_n, kernel_size=5, stride=2, padding=2, output_padding=1)
         nn.init.xavier_normal_(self.deconv1.weight.data, (math.sqrt(2 * (out_channels_m + out_channels_n) / (out_channels_m + out_channels_m))))
@@ -92,9 +115,9 @@ class SynthesisNet(nn.Module):
 
     def forward(self, x):
         x = self.igdn1(self.deconv1(x))
-        res = F.interpolate(x, scale_factor=2, mode="bilinear")
+        res = F.interpolate(x, scale_factor=2.)
         x = self.igdn2(self.deconv2(x)) + res
-        res = F.interpolate(x, scale_factor=2, mode="bilinear")
+        res = F.interpolate(x, scale_factor=2.)
         x = self.igdn3(self.deconv3(x)) + res
         x = self.deconv4(x)
         return x
@@ -102,7 +125,7 @@ class SynthesisNet(nn.Module):
 
 class SynthesisPriorNet(nn.Module):
     """SynthesisPriorNet"""
-    def __init__(self, out_channels_n=128, out_channels_m=192):
+    def __init__(self, out_channels_n=192, out_channels_m=320):
         super(SynthesisPriorNet, self).__init__()
         self.deconv1 = nn.ConvTranspose2d(out_channels_n, out_channels_n, kernel_size=5, stride=2, padding=2, output_padding=1)
         nn.init.xavier_normal_(self.deconv1.weight.data, math.sqrt(2))
@@ -128,7 +151,7 @@ class SynthesisPriorNet(nn.Module):
 
 class EDICImageCompression(nn.Module):
     """EDICImageCompression"""
-    def __init__(self, out_channels_n=128, out_channels_m=192):
+    def __init__(self, out_channels_n=192, out_channels_m=320):
         super(EDICImageCompression, self).__init__()
         self.out_channels_n = out_channels_n
         self.out_channels_m = out_channels_m
@@ -189,7 +212,7 @@ class EDICImageCompression(nn.Module):
         else:
             compressed_feature_renorm = torch.round(feature_renorm)
         recon_image = self.decoder(compressed_feature_renorm)
-        clipped_recon_image = recon_image.clamp(0., 1.)       # because it's float, clamp it
+        # clipped_recon_image = recon_image.clamp(0., 1.)       # because it's float, clamp it
 
         total_bits_feature, _ = utils.feature_probs_based_sigma(
             compressed_feature_renorm, recon_sigma
@@ -200,4 +223,4 @@ class EDICImageCompression(nn.Module):
         bpp_feature = total_bits_feature / (batch_size * x_shape[2] * x_shape[3])
         bpp_z = total_bits_z / (batch_size * x_shape[2] * x_shape[3])
 
-        return clipped_recon_image, bpp_feature, bpp_z
+        return recon_image, bpp_feature, bpp_z

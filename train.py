@@ -10,7 +10,7 @@ from tfrecord.torch.dataset import TFRecordDataset
 
 from tqdm import tqdm
 
-import model
+import models
 import config
 import utils
 
@@ -42,13 +42,13 @@ train_dataloader = dataloader.DataLoader(
 )
 # TODO(hujiakui): too slow when batch_size is 4, length will be 206516
 # length = utils.get_length(train_dataloader)
-length = 206516
+length = 825856
 
 valid_dataset = TFRecordDataset("valid.tfrecord", None, description)
 valid_dataloader = dataloader.DataLoader(dataset=valid_dataset, batch_size=1)
 
 # models init
-model = model.EDICImageCompression().to(device)
+model = models.EDICImageCompression().to(device)
 
 # criterion init
 criterion = torch.nn.MSELoss()
@@ -74,15 +74,17 @@ for epoch in range(opt.niter):
                 record["size"][0],
             ).float().to("cuda")
 
-            inputs = inputs.clamp(0., 1.)
-
             outputs, bpp_feature, bpp_z = model(inputs)
 
             model_optimizer.zero_grad()
 
-            loss = criterion(inputs, outputs)
+            # train lambda: 8192, add msssim-loss
+            print(utils.calc_msssim(inputs, outputs))
+            loss = criterion(inputs, outputs) + \
+                   (bpp_feature + bpp_z) * 8192 - \
+                   20 * torch.log(utils.calc_msssim(inputs, outputs) + 1e-7) * (epoch+1)
             loss.backward()
-            utils.clip_gradient(model_optimizer, 3)
+            utils.clip_gradient(model_optimizer, 5)
 
             model_optimizer.step()
             epoch_losses.update(loss.item(), len(inputs))
@@ -96,12 +98,16 @@ for epoch in range(opt.niter):
 
     model_scheduler.step()
 
-    # test
+    # test, just pick one to take a look
     model.eval()
     epoch_pnsr = utils.AverageMeter()
     epoch_ssim = utils.AverageMeter()
 
+    cnt = 0
     for record in valid_dataloader:
+        cnt += 1
+        if cnt >= 100:
+            break
         inputs = record["image"].reshape(
             1,
             3,
@@ -110,8 +116,9 @@ for epoch in range(opt.niter):
         ).float().to("cuda")
 
         with torch.no_grad():
-            output, _, _ = model(inputs[0])
-            epoch_pnsr.update(utils.calc_pnsr(output, inputs[0]), len(inputs))
-            epoch_ssim.update(utils.calc_ssim(output, inputs[0]), len(inputs))
+            output, bpp_feature_val, bpp_z_val = model(inputs)
+            epoch_pnsr.update(utils.calc_psnr(output, inputs), len(inputs))
+            epoch_ssim.update(utils.calc_ssim(output, inputs), len(inputs))
 
-    print('eval psnr: {:.4f} eval ssim: {:.4f} \n'.format(epoch_pnsr.avg, epoch_ssim.avg))
+    print('eval psnr: {:.4f} eval ssim: {:.4f}\n'.format(epoch_pnsr.avg, epoch_ssim.avg))
+    torch.save(model.state_dict(), "edic_epoch_{}_bpp_{}.pth".format(epoch, bpp_feature_val+bpp_z_val))
