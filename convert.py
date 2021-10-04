@@ -6,7 +6,7 @@ import models
 
 # models init
 model = models.EDICImageCompression()
-model_params = torch.load("edic_mseloss/edic_epoch_19_bpp_17.43553352355957.pth")
+model_params = torch.load("edic_epoch_3_bpp_0.080681.pth")
 model.load_state_dict(model_params)
 model.eval()
 

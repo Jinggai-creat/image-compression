@@ -1,10 +1,9 @@
 import math
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
-from skimage.metrics import structural_similarity as ssim
-import cv2
 
 
 def get_length(generator):
@@ -150,12 +149,18 @@ def clip_gradient(optimizer, grad_clip):
                 param.grad.data.clamp_(-grad_clip, grad_clip)
 
 
-def feature_probs_based_sigma(feature, sigma):
-    mu = torch.zeros_like(sigma)
-    sigma = sigma.clamp(1e-10, 1e10)
+def feature_probs_based_sigma(feature, sigma, mu=None):
+    if mu is None:
+        mu = torch.zeros_like(sigma)
+    sigma = sigma.clamp(1e-8, 1e8)
     gaussian = torch.distributions.laplace.Laplace(mu, sigma)
     probs = gaussian.cdf(feature + 0.5) - gaussian.cdf(feature - 0.5)
     total_bits = torch.sum(
-        torch.clamp(-1.0 * torch.log(probs + 1e-10) / math.log(2.0), 0, 50)
+        torch.clamp(-1.0 * torch.log(probs + 1e-8) / math.log(2.0), 0, 50)
     )
     return total_bits, probs
+
+
+def decode_image(x):
+    x["image"] = np.frombuffer(x["image"], dtype=np.float64)
+    return x

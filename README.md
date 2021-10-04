@@ -1,5 +1,6 @@
 # image-compression
-learn image compression
+
+image compression for `.nii`
 
 # Usage
 

@@ -1,11 +1,8 @@
 import random
-import warnings
 
 import torch
-import torch.nn as nn
 from torch import optim
 from torch.utils.data import dataloader
-from torch.autograd import Variable
 from tfrecord.torch.dataset import TFRecordDataset
 
 from tqdm import tqdm
@@ -13,7 +10,6 @@ from tqdm import tqdm
 import models
 import config
 import utils
-
 
 opt = config.get_options()
 
@@ -31,7 +27,7 @@ description = {
     "image": "byte",
     "size": "int",
 }
-train_dataset = TFRecordDataset("train.tfrecord", None, description)
+train_dataset = TFRecordDataset("train.tfrecord", None, description, transform=utils.decode_image, shuffle_queue_size=1024)
 # do not shuffle
 train_dataloader = dataloader.DataLoader(
     dataset=train_dataset,
@@ -40,12 +36,10 @@ train_dataloader = dataloader.DataLoader(
     pin_memory=True,
     drop_last=True
 )
-# TODO(hujiakui): too slow when batch_size is 4, length will be 206516
-# length = utils.get_length(train_dataloader)
-length = 825856
+length = 55440
 
-valid_dataset = TFRecordDataset("valid.tfrecord", None, description)
-valid_dataloader = dataloader.DataLoader(dataset=valid_dataset, batch_size=1)
+valid_dataset = TFRecordDataset("valid.tfrecord", None, description, transform=utils.decode_image)
+valid_dataloader = dataloader.DataLoader(dataset=valid_dataset, batch_size=opt.batch_size, drop_last=True)
 
 # models init
 model = models.EDICImageCompression().to(device)
@@ -69,7 +63,7 @@ for epoch in range(opt.niter):
         for record in train_dataloader:
             inputs = record["image"].reshape(
                 opt.batch_size,
-                3,
+                1,
                 record["size"][0],
                 record["size"][0],
             ).float().to("cuda")
@@ -78,19 +72,17 @@ for epoch in range(opt.niter):
 
             model_optimizer.zero_grad()
 
-            # train lambda: 8192, add msssim-loss
-            print(utils.calc_msssim(inputs, outputs))
-            loss = criterion(inputs, outputs) + \
-                   (bpp_feature + bpp_z) * 8192 - \
-                   20 * torch.log(utils.calc_msssim(inputs, outputs) + 1e-7) * (epoch+1)
+            # train lambda: 2048, add msssim-loss
+            loss_mse = criterion(inputs, outputs)
+            loss = loss_mse + (bpp_feature + bpp_z) * 2048
             loss.backward()
             utils.clip_gradient(model_optimizer, 5)
 
             model_optimizer.step()
-            epoch_losses.update(loss.item(), len(inputs))
+            epoch_losses.update(loss_mse.item(), len(inputs))
 
             t.set_postfix(
-                loss='{:.6f}'.format(epoch_losses.avg),
+                loss_mse='{:.6f}'.format(epoch_losses.avg),
                 bpp_feature='{:.6f}'.format(bpp_feature),
                 bpp_z='{:.6f}'.format(bpp_z)
             )
@@ -103,14 +95,10 @@ for epoch in range(opt.niter):
     epoch_pnsr = utils.AverageMeter()
     epoch_ssim = utils.AverageMeter()
 
-    cnt = 0
     for record in valid_dataloader:
-        cnt += 1
-        if cnt >= 100:
-            break
         inputs = record["image"].reshape(
+            opt.batch_size,
             1,
-            3,
             record["size"][0],
             record["size"][0],
         ).float().to("cuda")
@@ -121,4 +109,4 @@ for epoch in range(opt.niter):
             epoch_ssim.update(utils.calc_ssim(output, inputs), len(inputs))
 
     print('eval psnr: {:.4f} eval ssim: {:.4f}\n'.format(epoch_pnsr.avg, epoch_ssim.avg))
-    torch.save(model.state_dict(), "edic_epoch_{}_bpp_{}.pth".format(epoch, bpp_feature_val+bpp_z_val))
+    torch.save(model.state_dict(), "model/edic_epoch_{}_bpp_{:.4f}.pth".format(epoch, bpp_feature_val + bpp_z_val))

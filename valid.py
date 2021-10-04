@@ -1,7 +1,6 @@
 import time
 import os
 import torch
-import torch.nn as nn
 from torch.utils.data import dataloader
 from tfrecord.torch.dataset import TFRecordDataset
 
@@ -9,8 +8,8 @@ import models
 import utils
 
 
-for name in os.listdir("edic_mseloss"):
-    model_name = os.path.join("edic_mseloss", name)
+for name in os.listdir("model"):
+    model_name = os.path.join("model", name)
     # dataset init, train file need .tfrecord
     description = {
         "image": "byte",
