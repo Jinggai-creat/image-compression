@@ -16,7 +16,7 @@ for name in os.listdir("model"):
         "size": "int",
     }
     valid_dataset = TFRecordDataset("valid.tfrecord", None, description)
-    valid_dataloader = dataloader.DataLoader(dataset=valid_dataset, batch_size=16)
+    valid_dataloader = dataloader.DataLoader(dataset=valid_dataset, batch_size=1)
 
     # models init
     model = models.EDICImageCompression().to("cuda")
@@ -32,7 +32,7 @@ for name in os.listdir("model"):
     for record in valid_dataloader:
         cnt += 1
         inputs = record["image"].reshape(
-            16,
+            1,
             3,
             record["size"][0],
             record["size"][0],

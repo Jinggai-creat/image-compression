@@ -119,10 +119,11 @@ def calc_msssim(img1, img2, window_size=16, weights=None):
 
 def calc_psnr(img1, img2):
     """calculate PNSR on cuda and cpu: img1 and img2 have range [0, 255]"""
+    maximum = torch.max(torch.max(img1), torch.max(img2))
     mse = torch.mean((img1 - img2)**2)
     if mse == 0:
         return float('inf')
-    return 20 * torch.log10(255.0 / torch.sqrt(mse))
+    return 20 * torch.log10(maximum / torch.sqrt(mse))
 
 
 class AverageMeter(object):
@@ -152,15 +153,18 @@ def clip_gradient(optimizer, grad_clip):
 def feature_probs_based_sigma(feature, sigma, mu=None):
     if mu is None:
         mu = torch.zeros_like(sigma)
-    sigma = sigma.clamp(1e-8, 1e8)
+    sigma = sigma.clamp(1e-10, 1e8)
     gaussian = torch.distributions.laplace.Laplace(mu, sigma)
     probs = gaussian.cdf(feature + 0.5) - gaussian.cdf(feature - 0.5)
     total_bits = torch.sum(
-        torch.clamp(-1.0 * torch.log(probs + 1e-8) / math.log(2.0), 0, 50)
+        torch.clamp(-1.0 * torch.log(probs + 1e-10) / math.log(2.0), 0, 50)
     )
     return total_bits, probs
 
 
 def decode_image(x):
+    """
+    for np.float64 data
+    """
     x["image"] = np.frombuffer(x["image"], dtype=np.float64)
     return x

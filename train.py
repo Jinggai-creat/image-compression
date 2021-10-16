@@ -2,6 +2,7 @@ import random
 
 import torch
 from torch import optim
+from torch.autograd import Variable
 from torch.utils.data import dataloader
 from tfrecord.torch.dataset import TFRecordDataset
 
@@ -27,7 +28,7 @@ description = {
     "image": "byte",
     "size": "int",
 }
-train_dataset = TFRecordDataset("train.tfrecord", None, description, transform=utils.decode_image, shuffle_queue_size=1024)
+train_dataset = TFRecordDataset("train.tfrecord", None, description, shuffle_queue_size=1024)
 # do not shuffle
 train_dataloader = dataloader.DataLoader(
     dataset=train_dataset,
@@ -38,11 +39,13 @@ train_dataloader = dataloader.DataLoader(
 )
 length = 55440
 
-valid_dataset = TFRecordDataset("valid.tfrecord", None, description, transform=utils.decode_image)
+valid_dataset = TFRecordDataset("valid.tfrecord", None, description)
 valid_dataloader = dataloader.DataLoader(dataset=valid_dataset, batch_size=opt.batch_size, drop_last=True)
 
 # models init
 model = models.EDICImageCompression().to(device)
+params = torch.load("pretrain.pth")
+model.load_state_dict(params)
 
 # criterion init
 criterion = torch.nn.MSELoss()
@@ -56,6 +59,8 @@ print("-----------------train-----------------")
 for epoch in range(opt.niter):
     model.train()
     epoch_losses = utils.AverageMeter()
+    epoch_bpp_feature = utils.AverageMeter()
+    epoch_bpp_z = utils.AverageMeter()
 
     with tqdm(total=(length - length % opt.batch_size)) as t:
         t.set_description('epoch: {}/{}'.format(epoch + 1, opt.niter))
@@ -72,14 +77,16 @@ for epoch in range(opt.niter):
 
             model_optimizer.zero_grad()
 
-            # train lambda: 2048, add msssim-loss
+            # train lambda: 512
             loss_mse = criterion(inputs, outputs)
-            loss = loss_mse + (bpp_feature + bpp_z) * 2048
+            loss = loss_mse + (bpp_feature + bpp_z) * 768
             loss.backward()
-            utils.clip_gradient(model_optimizer, 5)
+            # utils.clip_gradient(model_optimizer, 3)
 
             model_optimizer.step()
             epoch_losses.update(loss_mse.item(), len(inputs))
+            epoch_bpp_feature.update(bpp_feature, len(inputs))
+            epoch_bpp_z.update(bpp_z, len(inputs))
 
             t.set_postfix(
                 loss_mse='{:.6f}'.format(epoch_losses.avg),

@@ -1,10 +1,10 @@
 # image-compression
 
-image compression for `.nii`
+image compression for `.nii.gz`
 
 # Usage
 
-After downloading the data
+After downloading the data, please make sure there is a dictionary called "dataset" contained `.nii.gz` files.
 
 > python make_dataset.py
 

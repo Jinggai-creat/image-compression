@@ -1,4 +1,5 @@
 import torch
+import math
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Function
@@ -44,22 +45,20 @@ class GDN(nn.Module):
         self.build(ch)
 
     def build(self, ch):
-        self.pedestal = self.reparam_offset**2
-        self.beta_bound = ((self.beta_min + self.reparam_offset**2)**0.5)
+        self.pedestal = self.reparam_offset ** 2
+        self.beta_bound = math.sqrt(self.beta_min + self.reparam_offset**2 + self.pedestal)
         self.gamma_bound = self.reparam_offset
 
         # Create beta param
-        beta = torch.sqrt(torch.ones(ch)+self.pedestal)
+        beta = torch.sqrt(torch.ones(ch) + self.pedestal)
         self.beta = nn.Parameter(beta)
 
         # Create gamma param
         eye = torch.eye(ch)
-        g = self.gamma_init*eye
-        g = g + self.pedestal
-        gamma = torch.sqrt(g)
+        g = self.gamma_init * eye
+        gamma = torch.sqrt(g + self.pedestal)
 
         self.gamma = nn.Parameter(gamma)
-        self.pedestal = self.pedestal
 
     def forward(self, x):
         unfold = False
@@ -81,7 +80,8 @@ class GDN(nn.Module):
 
         # Norm pool calc
         norm_ = F.conv2d(x**2, gamma, beta)
-        norm_ = torch.sqrt(norm_)
+        norm_ = torch.sqrt(torch.abs(norm_))
+        assert torch.isnan(norm_).sum() == 0
 
         # Apply norm
         outputs = None
