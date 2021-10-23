@@ -26,6 +26,7 @@ class GDN(nn.Module):
     """
     Generalized divisive normalization block.
     y[i] = x[i] / sqrt(beta[i] + sum_j(gamma[j, i] * x[j]))
+    TODO: can't convert(because of LowerBound)
     """
 
     def __init__(
@@ -67,7 +68,7 @@ class GDN(nn.Module):
             bs, ch, d, w, h = x.size() 
             x = x.view(bs, ch, d*w, h)
 
-        _, ch, _, _ = x.size()
+        _, ch, _, _ = x.shape
 
         # Beta bound and reparam
         beta = LowerBound.apply(self.beta, self.beta_bound)
@@ -81,7 +82,7 @@ class GDN(nn.Module):
         # Norm pool calc
         norm_ = F.conv2d(x**2, gamma, beta)
         norm_ = torch.sqrt(torch.abs(norm_))
-        assert torch.isnan(norm_).sum() == 0
+        # assert torch.isnan(norm_).sum() == 0
 
         # Apply norm
         outputs = None

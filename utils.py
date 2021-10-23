@@ -162,6 +162,34 @@ def feature_probs_based_sigma(feature, sigma, mu=None):
     return total_bits, probs
 
 
+def iclr18_estimate_bits(bit_estimator, z, eps=1e-10):
+    prob = bit_estimator(z + 0.5) - bit_estimator(z - 0.5)
+    total_bits = torch.sum(
+        torch.clamp(-1.0 * torch.log(prob + eps) / math.log(2.0), 0, 50)
+    )
+    return total_bits, prob
+
+
+def quantize(x, mean=None):
+    if mean is not None:
+        x = x - mean
+        x = torch.floor(x + 0.5)
+        x = x + mean
+    else:
+        x = torch.floor(x + 0.5)
+    return x
+
+
+def quantize_st(x, mean=None):
+    if mean is not None:
+        x = x - mean
+    delta = (torch.floor(x + 0.5) - x).detach()
+    x = x + delta
+    if mean is not None:
+        x = x + mean
+    return x
+
+
 def decode_image(x):
     """
     for np.float64 data
