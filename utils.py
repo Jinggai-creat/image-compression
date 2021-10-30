@@ -11,14 +11,17 @@ def get_length(generator):
 
 
 def gaussian(window_size, sigma):
-    gauss = torch.Tensor([math.exp(-(x - window_size//2)**2/float(2*sigma**2)) for x in range(window_size)])
+    gauss = torch.Tensor([math.exp(-(x - window_size//2)
+                         ** 2/float(2*sigma**2)) for x in range(window_size)])
     return gauss / gauss.sum()
 
 
 def create_window(window_size, channel):
     _1D_window = gaussian(window_size, 1.5).unsqueeze(1)
-    _2D_window = _1D_window.mm(_1D_window.t()).float().unsqueeze(0).unsqueeze(0)
-    window = Variable(_2D_window.expand(channel, 1, window_size, window_size).contiguous())
+    _2D_window = _1D_window.mm(
+        _1D_window.t()).float().unsqueeze(0).unsqueeze(0)
+    window = Variable(_2D_window.expand(
+        channel, 1, window_size, window_size).contiguous())
     return window
 
 
@@ -29,9 +32,10 @@ def upsampling(img, x, y):
 
 def generate_noise(size, channels=1, type='gaussian', scale=2):
     if type == 'gaussian':
-        noise = torch.randn(channels, size[0], round(size[1]/scale), round(size[2]/scale))
+        noise = torch.randn(channels, size[0], round(
+            size[1]/scale), round(size[2]/scale))
         noise = upsampling(noise, size[1], size[2])
-    if type =='gaussian_mixture':
+    if type == 'gaussian_mixture':
         noise1 = torch.randn(channels, size[0], size[1], size[2]) + 5
         noise2 = torch.randn(channels, size[0], size[1], size[2])
         noise = noise1 + noise2
@@ -58,9 +62,12 @@ def _ssim(img1, img2, window, window_size, channel, size_average=True):
     mu2_sq = mu2.pow(2)
     mu1_mu2 = mu1 * mu2
 
-    sigma1_sq = F.conv2d(img1*img1, window, padding=window_size//2, groups=channel) - mu1_sq
-    sigma2_sq = F.conv2d(img2*img2, window, padding=window_size//2, groups=channel) - mu2_sq
-    sigma12 = F.conv2d(img1*img2, window, padding=window_size//2, groups=channel) - mu1_mu2
+    sigma1_sq = F.conv2d(
+        img1*img1, window, padding=window_size//2, groups=channel) - mu1_sq
+    sigma2_sq = F.conv2d(
+        img2*img2, window, padding=window_size//2, groups=channel) - mu2_sq
+    sigma12 = F.conv2d(img1*img2, window, padding=window_size //
+                       2, groups=channel) - mu1_mu2
 
     C1 = 0.01**2
     C2 = 0.03**2
@@ -74,7 +81,7 @@ def _ssim(img1, img2, window, window_size, channel, size_average=True):
     return cs, ssim_per_channel
 
 
-def calc_ssim(img1, img2, window_size=32):
+def calc_ssim(img1, img2, window_size=11):
    """calculate SSIM"""
    (_, channel, _, _) = img1.size()
    window = create_window(window_size, channel)
@@ -88,7 +95,7 @@ def calc_ssim(img1, img2, window_size=32):
    return ssim_per_channel.mean()
 
 
-def calc_msssim(img1, img2, window_size=16, weights=None):
+def calc_msssim(img1, img2, window_size=11, weights=None):
     if weights is None:
         weights = [0.0448, 0.2856, 0.3001, 0.2363, 0.1333]
     weights = torch.FloatTensor(weights).to(img1.device, dtype=img1.dtype)
@@ -111,7 +118,8 @@ def calc_msssim(img1, img2, window_size=16, weights=None):
             img2 = F.avg_pool2d(img2, kernel_size=2, padding=padding)
 
     ssim_per_channel = torch.relu(ssim_per_channel)  # (batch, channel)
-    mcs_and_ssim = torch.stack(mcs + [ssim_per_channel], dim=0)  # (level, batch, channel)
+    # (level, batch, channel)
+    mcs_and_ssim = torch.stack(mcs + [ssim_per_channel], dim=0)
     ms_ssim_val = torch.prod(mcs_and_ssim ** weights.view(-1, 1, 1), dim=0)
 
     return ms_ssim_val.mean()
@@ -192,7 +200,7 @@ def quantize_st(x, mean=None):
 
 def decode_image(x):
     """
-    for np.float64 data
+    tfrecord with np.float64 data
     """
     x["image"] = np.frombuffer(x["image"], dtype=np.float64)
     return x

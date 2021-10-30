@@ -1,16 +1,18 @@
+import os
 import random
+from re import M
 
 import torch
 from torch import optim
-from torch.autograd import Variable
 from torch.utils.data import dataloader
-from tfrecord.torch.dataset import TFRecordDataset
+from tfrecord.torch.dataset import TFRecordDataset, MultiTFRecordDataset
 
 from tqdm import tqdm
 
 import models
 import config
 import utils
+import criterions
 
 opt = config.get_options()
 
@@ -29,7 +31,6 @@ description = {
     "size": "int",
 }
 train_dataset = TFRecordDataset("train.tfrecord", None, description, shuffle_queue_size=1024)
-# do not shuffle
 train_dataloader = dataloader.DataLoader(
     dataset=train_dataset,
     batch_size=opt.batch_size,
@@ -37,21 +38,22 @@ train_dataloader = dataloader.DataLoader(
     pin_memory=True,
     drop_last=True
 )
-length = 55440
+length = 94515 + 16890
 
 valid_dataset = TFRecordDataset("valid.tfrecord", None, description)
 valid_dataloader = dataloader.DataLoader(dataset=valid_dataset, batch_size=opt.batch_size, drop_last=True)
 
 # models init
 model = models.EDICImageCompression().to(device)
-params = torch.load("pretrain.pth")
-model.load_state_dict(params)
+if os.path.exists("pretrain.pth"):
+    params = torch.load("pretrain.pth")
+    model.load_state_dict(params)
 
 # criterion init
 criterion = torch.nn.MSELoss()
 
 # optim and scheduler init
-model_optimizer = optim.Adam(model.parameters(), lr=opt.lr, eps=1e-8, weight_decay=1)
+model_optimizer = optim.Adam(model.parameters(), lr=opt.lr)
 model_scheduler = optim.lr_scheduler.CosineAnnealingLR(model_optimizer, T_max=opt.niter)
 
 # train model
@@ -59,6 +61,7 @@ print("-----------------train-----------------")
 for epoch in range(opt.niter):
     model.train()
     epoch_losses = utils.AverageMeter()
+    epoch_loss_ssim = utils.AverageMeter()
     epoch_bpp_feature = utils.AverageMeter()
     epoch_bpp_z = utils.AverageMeter()
 
@@ -79,19 +82,22 @@ for epoch in range(opt.niter):
 
             # train lambda: 512
             loss_mse = criterion(inputs, outputs)
-            loss = loss_mse + (bpp_feature + bpp_z) * 768
+            loss_ssim = criterions.LossSSIM(inputs)(outputs)
+            loss = loss_mse + (bpp_feature + bpp_z) * 1536 + (1 - loss_ssim) * 2048
             loss.backward()
-            # utils.clip_gradient(model_optimizer, 3)
+            utils.clip_gradient(model_optimizer, 5)
 
             model_optimizer.step()
             epoch_losses.update(loss_mse.item(), len(inputs))
             epoch_bpp_feature.update(bpp_feature, len(inputs))
             epoch_bpp_z.update(bpp_z, len(inputs))
+            epoch_loss_ssim.update(loss_ssim.item(), len(inputs))
 
             t.set_postfix(
                 loss_mse='{:.6f}'.format(epoch_losses.avg),
-                bpp_feature='{:.6f}'.format(bpp_feature),
-                bpp_z='{:.6f}'.format(bpp_z)
+                bpp_feature='{:.6f}'.format(epoch_bpp_feature.avg),
+                bpp_z='{:.6f}'.format(epoch_bpp_z.avg),
+                train_ssim='{:.6f}'.format(epoch_loss_ssim.avg)
             )
             t.update(len(inputs))
 
@@ -113,7 +119,7 @@ for epoch in range(opt.niter):
         with torch.no_grad():
             output, bpp_feature_val, bpp_z_val = model(inputs)
             epoch_pnsr.update(utils.calc_psnr(output, inputs), len(inputs))
-            epoch_ssim.update(utils.calc_ssim(output, inputs), len(inputs))
+            epoch_ssim.update(utils.calc_msssim(output, inputs), len(inputs))
 
     print('eval psnr: {:.4f} eval ssim: {:.4f}\n'.format(epoch_pnsr.avg, epoch_ssim.avg))
     torch.save(model.state_dict(), "model/edic_epoch_{}_bpp_{:.4f}.pth".format(epoch, bpp_feature_val + bpp_z_val))

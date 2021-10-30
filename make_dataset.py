@@ -1,14 +1,15 @@
 import os
-import sys
 
-import cv2
 import numpy as np
-import pydicom
 import SimpleITK as sitk
 import tfrecord
 
+import cv2
+import sys
 
-size_image = 64
+
+size_image = 128
+stride = 32
 
 
 def clip(file_path):
@@ -27,8 +28,8 @@ def clip(file_path):
 def norm(file_path, maximum: int = 255, minimum: int = 0):
     image = sitk.ReadImage(file_path)
     resacleFilter = sitk.RescaleIntensityImageFilter()
-    resacleFilter.SetOutputMaximum(255)
-    resacleFilter.SetOutputMinimum(0)
+    resacleFilter.SetOutputMaximum(maximum)
+    resacleFilter.SetOutputMinimum(minimum)
     image = resacleFilter.Execute(image)
     data = sitk.GetArrayFromImage(image)
     return data
@@ -37,21 +38,22 @@ def norm(file_path, maximum: int = 255, minimum: int = 0):
 for split in ["train", "valid"]:
     cnt = 0
     writer = tfrecord.TFRecordWriter("{}.tfrecord".format(split))
-    data_path = "dataset/{}".format(split)
-    for file_name in os.listdir(data_path):
-        if ".nii.gz" not in file_name:
-            continue
-        file_path = clip(os.path.join(data_path, file_name))
-        print("saved 3d image in: {} ".format(file_path))
-        for image_name in os.listdir(file_path):
-            data = norm(os.path.join(file_path, image_name))
-            for y in range(data.shape[0]):
-                cnt += 1
-                data_part = data[y, ...].astype(np.uint8)
-                assert np.isnan(data_part).sum() == 0 and np.isinf(data_part).sum() == 0
-                writer.write({
-                    "image": (data_part.tobytes(), "byte"),
-                    "size": (size_image, "int"),
-                })
+    for kind in ["low", "high"]:
+        data_path = "dataset/" + kind + "/{}".format(split)
+        for file_name in os.listdir(data_path):
+            file_path = clip(os.path.join(data_path, file_name))
+            print("images dictionary: {} ".format(file_path))
+            for image_name in os.listdir(file_path):
+                data = norm(os.path.join(file_path, image_name))[0]
+                for x in np.arange(0, data.shape[0] - size_image + 1, stride):
+                    for y in np.arange(0, data.shape[1] - size_image + 1, stride):
+                        data_part = data[int(x): int(x + size_image), int(y): int(y + size_image)].astype(np.uint8)
+                        assert np.isnan(data_part).sum() == 0 and np.isinf(data_part).sum() == 0
+                        if np.mean(data_part) > 50:
+                            cnt += 1
+                            writer.write({
+                                "image": (data_part.tobytes(), "byte"),
+                                "size": (size_image, "int"),
+                            })
     writer.close()
     print("length of " + split + ": {}".format(cnt))

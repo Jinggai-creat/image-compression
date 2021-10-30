@@ -26,6 +26,7 @@ for name in os.listdir("model"):
     model.eval()
     epoch_pnsr = utils.AverageMeter()
     epoch_ssim = utils.AverageMeter()
+    epoch_bpp = utils.AverageMeter()
 
     t0 = time.clock()
     cnt = 0
@@ -33,7 +34,7 @@ for name in os.listdir("model"):
         cnt += 1
         inputs = record["image"].reshape(
             1,
-            3,
+            1,
             record["size"][0],
             record["size"][0],
         ).float().to("cuda")
@@ -41,9 +42,10 @@ for name in os.listdir("model"):
         with torch.no_grad():
             output, bpp_feature_val, bpp_z_val = model(inputs)
             epoch_pnsr.update(utils.calc_psnr(output, inputs), len(inputs))
-            epoch_ssim.update(utils.calc_ssim(output, inputs), len(inputs))
+            epoch_ssim.update(utils.calc_msssim(output, inputs), len(inputs))
+            epoch_bpp.update((bpp_feature_val + bpp_z_val), len(inputs))
     t1 = time.clock()
 
-    print('model name: {} eval psnr: {:.4f} eval ssim: {:.4f} valid_time: {:.4f}s \n'.format(
-        model_name, epoch_pnsr.avg, epoch_ssim.avg, (t1-t0) / cnt
+    print('model name: {} eval psnr: {:.4f} eval ssim: {:.4f} eval bpp: {:.4f} valid_time: {:.4f}s \n'.format(
+        model_name, epoch_pnsr.avg, epoch_ssim.avg, epoch_bpp.avg, (t1-t0) / cnt
     ))
