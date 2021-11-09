@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from gdn import GDN
+from gdn_converted import GDN
 from bit_estimator import BitEstimator
 import utils
 
@@ -110,35 +110,27 @@ class AnalysisNet(nn.Module):
     def __init__(self, out_channels_n=128, out_channels_m=192):
         super(AnalysisNet, self).__init__()
         self.conv1 = nn.Conv2d(1, out_channels_n, kernel_size=5, stride=2, padding=2)
-        nn.init.xavier_normal_(self.conv1.weight.data, (math.sqrt(2 * (3 + out_channels_n) / (6))))
-        nn.init.constant_(self.conv1.bias.data, 0.01)
         self.pool1 = nn.MaxPool2d((2, 2))
-        # self.gdn1 = GDN(out_channels_n)
-        self.gdn1 = nn.InstanceNorm2d(out_channels_n)
+        self.gdn1 = GDN(out_channels_n)
+        self.in1 = nn.InstanceNorm2d(out_channels_n)
 
         self.conv2 = nn.Conv2d(out_channels_n, out_channels_n, kernel_size=5, stride=2, padding=2)
-        nn.init.xavier_normal_(self.conv2.weight.data, math.sqrt(2))
-        nn.init.constant_(self.conv2.bias.data, 0.01)
         self.pool2 = nn.MaxPool2d((2, 2))
-        # self.gdn2 = GDN(out_channels_n)
-        self.gdn2 = nn.InstanceNorm2d(out_channels_n)
+        self.gdn2 = GDN(out_channels_n)
+        self.in2 = nn.InstanceNorm2d(out_channels_n)
 
         self.conv3 = nn.Conv2d(out_channels_n, out_channels_n, kernel_size=5, stride=2, padding=2)
-        nn.init.xavier_normal_(self.conv3.weight.data, math.sqrt(2))
-        nn.init.constant_(self.conv3.bias.data, 0.01)
-        # self.gdn3 = GDN(out_channels_n)
-        self.gdn3 = nn.InstanceNorm2d(out_channels_n)
+        self.gdn3 = GDN(out_channels_n)
+        self.in3 = nn.InstanceNorm2d(out_channels_n)
 
         self.conv4 = nn.Conv2d(out_channels_n, out_channels_m, kernel_size=5, stride=2, padding=2)
-        nn.init.xavier_normal_(self.conv4.weight.data, (math.sqrt(2 * (out_channels_m + out_channels_n) / (out_channels_n + out_channels_n))))
-        nn.init.constant_(self.conv4.bias.data, 0.01)
 
     def forward(self, x):
-        x = self.gdn1(self.conv1(x))
+        x = self.gdn1(self.in1(self.conv1(x)))
         res = self.pool1(x)
-        x = self.gdn2(self.conv2(x)) + res
+        x = self.gdn2(self.in2(self.conv2(x))) + res
         res = self.pool2(x)
-        x = self.gdn3(self.conv3(x)) + res
+        x = self.gdn3(self.in3(self.conv3(x))) + res
         x = self.conv4(x)
         return x
 
@@ -148,18 +140,12 @@ class AnalysisPriorNet(nn.Module):
     def __init__(self, out_channels_n=128, out_channels_m=192):
         super(AnalysisPriorNet, self).__init__()
         self.conv1 = nn.Conv2d(out_channels_m, out_channels_n, kernel_size=3, stride=1, padding=1)
-        nn.init.xavier_normal_(self.conv1.weight.data, (math.sqrt(2 * (out_channels_m + out_channels_n) / (out_channels_m + out_channels_m))))
-        nn.init.constant_(self.conv1.bias.data, 0.01)
         self.relu1 = nn.LeakyReLU(0.1, inplace=True)
 
         self.conv2 = nn.Conv2d(out_channels_n, out_channels_n, kernel_size=5, stride=2, padding=2)
-        nn.init.xavier_normal_(self.conv2.weight.data, math.sqrt(2))
-        nn.init.constant_(self.conv2.bias.data, 0.01)
         self.relu2 = nn.LeakyReLU(0.1, inplace=True)
 
         self.conv3 = nn.Conv2d(out_channels_n, out_channels_n, kernel_size=5, stride=2, padding=2)
-        nn.init.xavier_normal_(self.conv2.weight.data, math.sqrt(2))
-        nn.init.constant_(self.conv2.bias.data, 0.01)
 
     def forward(self, x):
         x = torch.abs(x)
@@ -174,33 +160,25 @@ class SynthesisNet(nn.Module):
     def __init__(self, out_channels_n=128, out_channels_m=192):
         super(SynthesisNet, self).__init__()
         self.deconv1 = nn.ConvTranspose2d(out_channels_m, out_channels_n, kernel_size=5, stride=2, padding=2, output_padding=1)
-        nn.init.xavier_normal_(self.deconv1.weight.data, (math.sqrt(2 * (out_channels_m + out_channels_n) / (out_channels_m + out_channels_m))))
-        nn.init.constant_(self.deconv1.bias.data, 0.01)
-        # self.igdn1 = GDN(out_channels_n, inverse=True)
-        self.igdn1 = nn.InstanceNorm2d(out_channels_n)
+        self.igdn1 = GDN(out_channels_n, inverse=True)
+        self.in1 = nn.InstanceNorm2d(out_channels_n)
 
         self.deconv2 = nn.ConvTranspose2d(out_channels_n, out_channels_n, kernel_size=5, stride=2, padding=2, output_padding=1)
-        nn.init.xavier_normal_(self.deconv2.weight.data, math.sqrt(2))
-        nn.init.constant_(self.deconv2.bias.data, 0.01)
-        # self.igdn2 = GDN(out_channels_n, inverse=True)
-        self.igdn2 = nn.InstanceNorm2d(out_channels_n)
+        self.igdn2 = GDN(out_channels_n, inverse=True)
+        self.in2 = nn.InstanceNorm2d(out_channels_n)
 
         self.deconv3 = nn.ConvTranspose2d(out_channels_n, out_channels_n, kernel_size=5, stride=2, padding=2, output_padding=1)
-        nn.init.xavier_normal_(self.deconv2.weight.data, math.sqrt(2))
-        nn.init.constant_(self.deconv2.bias.data, 0.01)
-        # self.igdn3 = GDN(out_channels_n, inverse=True)
-        self.igdn3 = nn.InstanceNorm2d(out_channels_n)
+        self.igdn3 = GDN(out_channels_n, inverse=True)
+        self.in3 = nn.InstanceNorm2d(out_channels_n)
 
         self.deconv4 = nn.ConvTranspose2d(out_channels_n, 1, kernel_size=5, stride=2, padding=2, output_padding=1)
-        nn.init.xavier_normal_(self.deconv4.weight.data, (math.sqrt(2 * (out_channels_n + 3) / (out_channels_n + out_channels_n))))
-        nn.init.constant_(self.deconv4.bias.data, 0.01)
 
     def forward(self, x):
-        x = self.igdn1(self.deconv1(x))
+        x = self.igdn1(self.in1(self.deconv1(x)))
         res = F.interpolate(x, scale_factor=2.)
-        x = self.igdn2(self.deconv2(x)) + res
+        x = self.igdn2(self.in2(self.deconv2(x))) + res
         res = F.interpolate(x, scale_factor=2.)
-        x = self.igdn3(self.deconv3(x)) + res
+        x = self.igdn3(self.in3(self.deconv3(x))) + res
         x = self.deconv4(x)
         return x
 
@@ -210,18 +188,12 @@ class SynthesisPriorNet(nn.Module):
     def __init__(self, out_channels_n=128, out_channels_m=192, withDLMM: bool = False):
         super(SynthesisPriorNet, self).__init__()
         self.deconv1 = nn.ConvTranspose2d(out_channels_n, out_channels_n, kernel_size=5, stride=2, padding=2, output_padding=1)
-        nn.init.xavier_normal_(self.deconv1.weight.data, math.sqrt(2))
-        nn.init.constant_(self.deconv1.bias.data, 0.01)
         self.relu1 = nn.LeakyReLU(0.1, inplace=True)
 
         self.deconv2 = nn.ConvTranspose2d(out_channels_n, out_channels_n, kernel_size=5, stride=2, padding=2, output_padding=1)
-        nn.init.xavier_normal_(self.deconv1.weight.data, math.sqrt(2))
-        nn.init.constant_(self.deconv1.bias.data, 0.01)
         self.relu2 = nn.LeakyReLU(0.1, inplace=True)
 
         self.deconv3 = nn.ConvTranspose2d(out_channels_n, out_channels_m, kernel_size=3, stride=1, padding=1)
-        nn.init.xavier_normal_(self.deconv3.weight.data, (math.sqrt(2 * (out_channels_m + out_channels_n) / (out_channels_n + out_channels_n))))
-        nn.init.constant_(self.deconv3.bias.data, 0.01)
 
         self.withDLMM = withDLMM
         if withDLMM:
@@ -264,6 +236,8 @@ class EDICImageCompression(nn.Module):
 
         self.encoder_prior = AnalysisPriorNet(out_channels_n, out_channels_m)
         # self.decoder_prior = SynthesisPriorNet(out_channels_n, out_channels_m)
+        self.decoder_prior_mu = SynthesisPriorNet(out_channels_n, out_channels_m)
+        self.decoder_prior_std = SynthesisPriorNet(out_channels_n, out_channels_m)
         self.decoder_prior = SynthesisPriorCANet(out_channels_n, out_channels_m)
 
         self.bit_estimator_z = BitEstimator(out_channels_n)
@@ -300,8 +274,9 @@ class EDICImageCompression(nn.Module):
             compressed_z = torch.round(z)
 
         # step 4: compress the feature by the prior(entropy decoding)
-        # recon_sigma = self.decoder_prior(compressed_z)
-        recon_mu, recon_sigma = self.decoder_prior(compressed_z)
+        recon_mu = self.decoder_prior_mu(compressed_z)
+        recon_sigma = self.decoder_prior_std(compressed_z)
+        # recon_mu, recon_sigma = self.decoder_prior(compressed_z)
         feature_renorm = feature
         if self.training:
             compressed_feature_renorm = feature_renorm + quant_noise_feature

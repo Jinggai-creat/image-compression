@@ -71,11 +71,18 @@ class GDN(nn.Module):
         _, ch, _, _ = x.shape
 
         # Beta bound and reparam
-        beta = LowerBound.apply(self.beta, self.beta_bound)
+        if self.training:
+            beta = LowerBound.apply(self.beta, self.beta_bound)
+        else:
+            beta = torch.max(self.beta, self.beta_bound*torch.ones_like(self.beta))
         beta = beta**2 - self.pedestal
 
         # Gamma bound and reparam
-        gamma = LowerBound.apply(self.gamma, self.gamma_bound)
+        if self.training:
+            gamma = LowerBound.apply(self.gamma, self.gamma_bound)
+        else:
+            gamma = torch.max(self.gamma, self.gamma_bound*torch.ones_like(self.gamma))
+
         gamma = gamma**2 - self.pedestal
         gamma = gamma.view(ch, ch, 1, 1)
 
