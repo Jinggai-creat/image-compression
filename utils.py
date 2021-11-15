@@ -196,7 +196,7 @@ def quantize_st(x, mean=None):
     if mean is not None:
         x = x + mean
     return x
-
+# vitis-ai, pytorch round, floor()
 
 def decode_image(x):
     """

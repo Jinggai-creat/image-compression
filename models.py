@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from gdn_converted import GDN
+from gdn import GDN
 from bit_estimator import BitEstimator
 import utils
 
@@ -503,6 +503,6 @@ class HiFImageCompression(nn.Module):
 
 if __name__ == "__main__":
     from torchsummary import summary
-    a = HiFImageCompression().cuda()
+    a = EDICImageCompression().cuda()
     summary(a, (1, 64, 64))
     # if you use HiFIC, torchsummary may raise TypeError

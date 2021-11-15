@@ -1,8 +1,11 @@
 import time
+import cv2
 import os
 import torch
 from torch.utils.data import dataloader
 from tfrecord.torch.dataset import TFRecordDataset
+
+import sys
 
 import models
 import utils
@@ -39,11 +42,18 @@ for name in os.listdir("model"):
             record["size"][0],
         ).float().to("cuda")
 
+        cv2.imshow("input", inputs.cpu().squeeze().numpy()/255)
+
         with torch.no_grad():
             output, bpp_feature_val, bpp_z_val = model(inputs)
             epoch_pnsr.update(utils.calc_psnr(output, inputs), len(inputs))
             epoch_ssim.update(utils.calc_msssim(output, inputs), len(inputs))
             epoch_bpp.update((bpp_feature_val + bpp_z_val), len(inputs))
+        cv2.imshow("bpp{}".format(bpp_feature_val), output.cpu().squeeze().numpy()/255)
+        cv2.waitKey()
+        cv2.destroyAllWindows()
+        if cnt == 10:
+            break
     t1 = time.clock()
 
     print('model name: {} eval psnr: {:.4f} eval ssim: {:.4f} eval bpp: {:.4f} valid_time: {:.4f}s \n'.format(
