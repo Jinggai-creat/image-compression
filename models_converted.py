@@ -46,10 +46,8 @@ class AnalysisNet(nn.Module):
 
     def forward(self, x):
         x = self.in1(self.conv1(x))
-        res = self.pool1(x)
-        x = self.in2(self.conv2(x)) + res
-        res1 = self.pool2(x)
-        x = self.in3(self.conv3(x)) + res1
+        x = self.in2(self.conv2(x))
+        x = self.in3(self.conv3(x))
         x = self.conv4(x)
         return x
 
@@ -93,10 +91,8 @@ class SynthesisNet(nn.Module):
 
     def forward(self, x):
         x = self.igdn1(self.deconv1(x))
-        res2 = F.interpolate(x, scale_factor=2)
-        x = self.igdn2(self.deconv2(x)) + res2
-        res3 = F.interpolate(x, scale_factor=2)
-        x = self.igdn3(self.deconv3(x)) + res3
+        x = self.igdn2(self.deconv2(x))
+        x = self.igdn3(self.deconv3(x))
         x = self.deconv4(x)
         return x
 

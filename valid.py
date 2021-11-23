@@ -5,10 +5,41 @@ import torch
 from torch.utils.data import dataloader
 from tfrecord.torch.dataset import TFRecordDataset
 
-import sys
-
-import models
+from models_converted import *
 import utils
+
+
+class EDICImageCompressionValid(nn.Module):
+    """EDICImageCompression for valid"""
+
+    def __init__(self, out_channels_n=128, out_channels_m=192):
+        super(EDICImageCompressionValid, self).__init__()
+        self.out_channels_n = out_channels_n
+        self.out_channels_m = out_channels_m
+
+        self.encoder = AnalysisNet(out_channels_n, out_channels_m)
+        self.decoder = SynthesisNet(out_channels_n, out_channels_m)
+
+        self.encoder_prior = AnalysisPriorNet(out_channels_n, out_channels_m)
+        self.decoder_prior_mu = SynthesisPriorNet(out_channels_n, out_channels_m)
+        self.decoder_prior_std = SynthesisPriorNet(out_channels_n, out_channels_m)
+        self.decoder_prior = SynthesisPriorCANet(out_channels_n, out_channels_m)
+
+        self.bit_estimator_z = BitEstimator(out_channels_n)
+    
+    def forward(self, x):
+        feature = self.encoder(x)
+        recon_image = self.decoder(feature)
+
+        z = self.encoder_prior(feature)
+        recon_sigma = self.decoder_prior_std(z)
+        total_bits_feature, _ = utils.feature_probs_based_sigma(
+            feature, recon_sigma
+        )
+        bpp_feature = total_bits_feature / (x.shape[0] * x.shape[2] * x.shape[3])
+        total_bits_z, _ = utils.iclr18_estimate_bits(self.bit_estimator_z, z)
+        bpp_z = total_bits_z / (x.shape[0] * x.shape[2] * x.shape[3])
+        return recon_image, bpp_feature, bpp_z
 
 
 for name in os.listdir("model"):
@@ -22,7 +53,7 @@ for name in os.listdir("model"):
     valid_dataloader = dataloader.DataLoader(dataset=valid_dataset, batch_size=1)
 
     # models init
-    model = models.EDICImageCompression().to("cuda")
+    model = EDICImageCompressionValid().to("cuda")
     model_params = torch.load(model_name)
     model.load_state_dict(model_params)
 
