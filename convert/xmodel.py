@@ -71,7 +71,7 @@ def model_info_read(model):
 
 
 def quantize(quant_mode: str = "calib", device=torch.device("cpu")):
-    edic_model = torch.load("../model/pretrain_low.pth")
+    edic_model = torch.load("../model/pretrain_converted_low.pth")
 
     # need ==> edic_encoder + edic_decoder
     # edic_encoder = None
