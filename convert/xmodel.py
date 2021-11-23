@@ -68,8 +68,8 @@ def quantize(img, quant_mode: str = "calib", deploy: bool = False, device=torch.
     # edic_encoder = None
     # edic_decoder = None
 
-    recon_img = edic_model(img)
     print("============================== PyTorch local ==================================")
+    recon_img = edic_model(img)
     print("PSNR: {}".format(utils.calc_psnr(img, recon_img)))
     print("SSIM: {}".format(utils.calc_msssim(img, recon_img)))
     cv2.imwrite("img_{}.png".format(quant_mode), img.squeeze().detach().numpy())
