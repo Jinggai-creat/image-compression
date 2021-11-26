@@ -27,9 +27,9 @@ class EDICConvert(EDICImageCompression):
 
 # models init
 model = EDICConvert().cuda()
-model_params = torch.load("../model/pretrain_converted.pth")
+model_params = torch.load("../model/pretrain_converted2.pth")
 # for pytorch 1.4.0 and Vitis-AI 1.4.0
-torch.save(model_params, "../model/pretrain_converted_low.pth", _use_new_zipfile_serialization=False)
+torch.save(model_params, "../model/pretrain_converted2_low.pth", _use_new_zipfile_serialization=False)
 model.load_state_dict(model_params)
 model.eval()
 
